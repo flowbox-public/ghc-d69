@@ -1,0 +1,73 @@
+diff --git a/compiler/main/DynFlags.hs b/compiler/main/DynFlags.hs
+--- a/compiler/main/DynFlags.hs
++++ b/compiler/main/DynFlags.hs
+@@ -553,6 +553,7 @@
+    | Opt_MultiParamTypeClasses
+    | Opt_NullaryTypeClasses
+    | Opt_FunctionalDependencies
++   | Opt_DysfunctionalDependencies
+    | Opt_UnicodeSyntax
+    | Opt_ExistentialQuantification
+    | Opt_MagicHash
+@@ -2871,6 +2872,7 @@
+   ( "NullaryTypeClasses",               Opt_NullaryTypeClasses,
+     deprecatedForExtension "MultiParamTypeClasses" ),
+   ( "FunctionalDependencies",           Opt_FunctionalDependencies, nop ),
++  ( "DysfunctionalDependencies",        Opt_DysfunctionalDependencies, nop ),
+   ( "GeneralizedNewtypeDeriving",       Opt_GeneralizedNewtypeDeriving, setGenDeriving ),
+   ( "OverlappingInstances",             Opt_OverlappingInstances, nop ),
+   ( "UndecidableInstances",             Opt_UndecidableInstances, nop ),
+@@ -2927,6 +2929,7 @@
+     , (Opt_ExistentialQuantification, turnOn, Opt_ExplicitForAll)
+     , (Opt_FlexibleInstances,         turnOn, Opt_TypeSynonymInstances)
+     , (Opt_FunctionalDependencies,    turnOn, Opt_MultiParamTypeClasses)
++    , (Opt_DysfunctionalDependencies, turnOn, Opt_MultiParamTypeClasses)
+ 
+     , (Opt_RebindableSyntax, turnOff, Opt_ImplicitPrelude)      -- NB: turn off!
+ 
+diff --git a/compiler/typecheck/TcValidity.lhs b/compiler/typecheck/TcValidity.lhs
+--- a/compiler/typecheck/TcValidity.lhs
++++ b/compiler/typecheck/TcValidity.lhs
+@@ -874,12 +874,15 @@
+         --   e.g.  Bar a => Bar Int is ambiguous, but it also fails
+         --   the termination condition, because 'a' appears more often
+         --   in the constraint than in the head
++        ; dysfundep_ok   <- xoptM Opt_DysfunctionalDependencies
+         ; undecidable_ok <- xoptM Opt_UndecidableInstances
+-        ; if undecidable_ok 
++
++        ; if undecidable_ok
+           then checkAmbiguity ctxt ty
+           else checkInstTermination inst_tys theta
+ 
+-        ; case (checkInstCoverage undecidable_ok clas theta inst_tys) of
++        ; unless dysfundep_ok
++        $ case (checkInstCoverage undecidable_ok clas theta inst_tys) of
+             Nothing  -> return ()   -- Check succeeded
+             Just msg -> addErrTc (instTypeErr clas inst_tys msg)
+                   
+diff --git a/docs/users_guide/glasgow_exts.xml b/docs/users_guide/glasgow_exts.xml
+--- a/docs/users_guide/glasgow_exts.xml
++++ b/docs/users_guide/glasgow_exts.xml
+@@ -4930,6 +4930,21 @@
+     op = ... -- Default
+ </programlisting>
+ </para>
++
++<para>
++    Please note, that starting with GHC 7.8, using <option>-XUndecidableInstances</option> does not lift the Liberal Coverage Condition, which assumes, that left hand side of given instance should determine the right hand side. It can be further lifted by using <option>-XDysfunctionalDependencies</option> flag, allowing the following program to type check and compile:
++    <programlisting>
++data X = X
++
++class CTest a b | a -> b where
++    ctest :: a -> b
++
++instance Monad m => CTest X (m Int) where
++    ctest _ = return 5
++
++main = print (ctest X :: [Int])
++    </programlisting>
++</para>
+ </sect3>
+ 
+ <sect3 id="undecidable-instances">
