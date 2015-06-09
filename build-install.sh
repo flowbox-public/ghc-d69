@@ -46,7 +46,7 @@ printHeader() {
 # check if the required 'patch' utility is installed
 type patch  >/dev/null 2>&1 || { echo >&2 "System utility 'patch' required but not found. Install it and try again."; exit 1; }
 
-SCRIPT=$(readlink -f "$0")
+SCRIPT=$(cd -P -- "$(dirname -- "$0")" && printf '%s\n' "$(pwd -P)/$(basename -- "$0")")
 SCRIPTPATH=$(dirname "$SCRIPT")
 
 DEFAULT_VERSION="7.8.4"
