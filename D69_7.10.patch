@@ -1,0 +1,71 @@
+diff -rupN ghc-7.10.2/compiler/main/DynFlags.hs ghc-7.10-d69/compiler/main/DynFlags.hs
+--- ghc-7.10.2/compiler/main/DynFlags.hs	2015-07-21 15:52:57.000000000 +0200
++++ ghc-7.10-d69/compiler/main/DynFlags.hs	2015-10-05 12:56:11.000000000 +0200
+@@ -604,6 +604,7 @@ data ExtensionFlag
+    | Opt_MultiParamTypeClasses
+    | Opt_NullaryTypeClasses
+    | Opt_FunctionalDependencies
++   | Opt_DysfunctionalDependencies
+    | Opt_UnicodeSyntax
+    | Opt_ExistentialQuantification
+    | Opt_MagicHash
+@@ -3106,6 +3107,7 @@ xFlags = [
+   flagSpec "FlexibleInstances"                Opt_FlexibleInstances,
+   flagSpec "ForeignFunctionInterface"         Opt_ForeignFunctionInterface,
+   flagSpec "FunctionalDependencies"           Opt_FunctionalDependencies,
++  flagSpec "DysfunctionalDependencies"        Opt_DysfunctionalDependencies,
+   flagSpec "GADTSyntax"                       Opt_GADTSyntax,
+   flagSpec "GADTs"                            Opt_GADTs,
+   flagSpec "GHCForeignImportPrim"             Opt_GHCForeignImportPrim,
+@@ -3238,6 +3240,7 @@ impliedXFlags
+     , (Opt_ExistentialQuantification, turnOn, Opt_ExplicitForAll)
+     , (Opt_FlexibleInstances,         turnOn, Opt_TypeSynonymInstances)
+     , (Opt_FunctionalDependencies,    turnOn, Opt_MultiParamTypeClasses)
++    , (Opt_DysfunctionalDependencies, turnOn, Opt_MultiParamTypeClasses)
+ 
+     , (Opt_RebindableSyntax, turnOff, Opt_ImplicitPrelude)      -- NB: turn off!
+ 
+diff -rupN ghc-7.10.2/compiler/typecheck/TcValidity.hs ghc-7.10-d69/compiler/typecheck/TcValidity.hs
+--- ghc-7.10.2/compiler/typecheck/TcValidity.hs	2015-07-10 12:20:40.000000000 +0200
++++ ghc-7.10-d69/compiler/typecheck/TcValidity.hs	2015-10-05 12:59:50.000000000 +0200
+@@ -913,12 +913,14 @@ checkValidInstance ctxt hs_type ty
+         --   e.g.  Bar a => Bar Int is ambiguous, but it also fails
+         --   the termination condition, because 'a' appears more often
+         --   in the constraint than in the head
++        ; dysfundep_ok   <- xoptM Opt_DysfunctionalDependencies
+         ; undecidable_ok <- xoptM Opt_UndecidableInstances
+         ; if undecidable_ok
+           then checkAmbiguity ctxt ty
+           else checkInstTermination inst_tys theta
+ 
+-        ; case (checkInstCoverage undecidable_ok clas theta inst_tys) of
++        ; unless dysfundep_ok
++        $ case (checkInstCoverage undecidable_ok clas theta inst_tys) of
+             IsValid  -> return ()   -- Check succeeded
+             NotValid msg -> addErrTc (instTypeErr clas inst_tys msg)
+ 
+diff -rupN ghc-7.10.2/docs/users_guide/glasgow_exts.xml ghc-7.10-d69/docs/users_guide/glasgow_exts.xml
+--- ghc-7.10.2/docs/users_guide/glasgow_exts.xml	2015-07-21 15:52:50.000000000 +0200
++++ ghc-7.10-d69/docs/users_guide/glasgow_exts.xml	2015-10-05 17:19:29.000000000 +0200
+@@ -5040,6 +5040,21 @@ something more specific does not:
+     op = ... -- Default
+ </programlisting>
+ </para>
++
++<para>
++    Please note, that starting with GHC 7.8, using <option>-XUndecidableInstances</option> does not lift the Liberal Coverage Condition, which assumes, that left hand side of given instance should determine the right hand side. It can be further lifted by using <option>-XDysfunctionalDependencies</option> flag, allowing the following program to type check and compile:
++    <programlisting>
++data X = X
++
++class CTest a b | a -> b where
++    ctest :: a -> b
++
++instance Monad m => CTest X (m Int) where
++    ctest _ = return 5
++
++main = print (ctest X :: [Int])
++    </programlisting>
++</para>
+ </sect3>
+ 
+ <sect3 id="undecidable-instances">
