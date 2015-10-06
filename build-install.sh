@@ -112,8 +112,21 @@ tar xf ghc-$VERSION-src.tar.xz
 
 printHeader "APPLYING THE PATCH..."
 pushd ghc-$VERSION  # push-2
-echo $SCRIPTPATH/D69_simplified.diff
-patch -p1 < $SCRIPTPATH/D69_simplified.diff
+
+
+case $VERSION in
+    7.10*)
+        PATCHPATH=$SCRIPTPATH/D69_7.10.diff
+        shift
+    ;;
+    *)
+        PATCHPATH=$SCRIPTPATH/D69_simplified.diff
+        shift
+    ;;
+esac
+
+echo $PATCHPATH
+patch -p1 < $PATCHPATH
 
 printHeader "CONFIGURING GHC..."
 ./configure --prefix="$PREFIX"
